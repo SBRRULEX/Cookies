@@ -1,5 +1,3 @@
-// backend/index.js
-
 const express = require('express');
 const puppeteer = require('puppeteer');
 const bodyParser = require('body-parser');
@@ -9,9 +7,8 @@ const { randomBytes } = require('crypto');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// FRONTEND FOLDER - assuming repo structure where
-// process.cwd() points to root folder containing 'frontend' and 'backend' folders
-const frontendPath = path.join(process.cwd(), 'frontend');
+// ✅ Correct frontend path (from /backend to /frontend)
+const frontendPath = path.join(__dirname, '../frontend');
 
 app.use(bodyParser.json());
 app.use(express.static(frontendPath));
@@ -19,20 +16,23 @@ app.use(express.static(frontendPath));
 let stopCode = randomBytes(3).toString('hex');
 let shouldStop = false;
 
+// Send stop code
 app.get('/stop-code', (_, res) => {
   res.json({ stopCode });
 });
 
+// Stop route
 app.post('/stop', (req, res) => {
   if (req.body.code === stopCode) {
     shouldStop = true;
-    stopCode = randomBytes(3).toString('hex'); // refresh stop code
+    stopCode = randomBytes(3).toString('hex');
     res.json({ status: 'Stopped' });
   } else {
     res.json({ status: 'Invalid Code' });
   }
 });
 
+// Main message sender
 app.post('/send', async (req, res) => {
   const { token, uid, message, delay = 5 } = req.body;
   shouldStop = false;
@@ -45,9 +45,7 @@ app.post('/send', async (req, res) => {
 
     const page = await browser.newPage();
 
-    // Set token as cookie or header, depending on your flow.
-    // Adjust this based on your login/auth method.
-
+    // Set token manually in headers or cookies (adjust if needed)
     await page.setExtraHTTPHeaders({
       authorization: token,
     });
@@ -59,7 +57,6 @@ app.post('/send', async (req, res) => {
     await page.waitForSelector('[role="textbox"]', { timeout: 15000 });
 
     const messages = message.split('\n');
-
     for (let msg of messages) {
       if (shouldStop) break;
 
@@ -81,6 +78,7 @@ app.post('/send', async (req, res) => {
   }
 });
 
+// ✅ Serve frontend correctly
 app.get('/', (req, res) => {
   res.sendFile(path.join(frontendPath, 'index.html'));
 });

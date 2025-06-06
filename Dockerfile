@@ -4,17 +4,20 @@ FROM node:20
 # Set working directory
 WORKDIR /app
 
-# Copy package.json and package-lock.json
-COPY package*.json ./
-
-# Install dependencies (includes Puppeteer with Chromium)
+# Copy backend files
+COPY backend/package*.json ./
 RUN npm install
 
-# Copy rest of the code
-COPY . .
+COPY backend/ .
 
-# Expose the port your app runs on
+# Install puppeteer dependencies (important for headless chrome)
+RUN apt-get update && \
+    apt-get install -y chromium && \
+    npm install puppeteer
+
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+
+# Expose port
 EXPOSE 3000
 
-# Start the application
-CMD ["npm", "start"]
+CMD ["node", "index.js"]

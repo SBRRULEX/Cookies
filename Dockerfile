@@ -1,23 +1,17 @@
-# Use official Node.js base image
-FROM node:20
+# Use Node.js as base image
+FROM node:18
 
 # Set working directory
 WORKDIR /app
 
-# Copy backend files
-COPY backend/package*.json ./
-RUN npm install
+# Copy entire repo contents
+COPY . .
 
-COPY backend/ .
-
-# Install puppeteer dependencies (important for headless chrome)
-RUN apt-get update && \
-    apt-get install -y chromium && \
-    npm install puppeteer
-
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+# Install backend dependencies
+RUN cd backend && npm install
 
 # Expose port
 EXPOSE 3000
 
-CMD ["node", "index.js"]
+# Start the backend server
+CMD ["node", "backend/index.js"]

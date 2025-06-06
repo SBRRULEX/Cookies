@@ -1,88 +1,56 @@
-const express = require('express');
-const puppeteer = require('puppeteer');
-const bodyParser = require('body-parser');
-const path = require('path');
-const { randomBytes } = require('crypto');
+// backend/index.js (Fully Fixed Version)
 
-const app = express();
-const PORT = process.env.PORT || 3000;
+const express = require('express'); const puppeteer = require('puppeteer'); const bodyParser = require('body-parser'); const path = require('path'); const { randomBytes } = require('crypto');
 
-// ✅ Correct frontend path (from /backend to /frontend)
-const frontendPath = path.join(__dirname, '../frontend');
+const app = express(); const PORT = process.env.PORT || 3000;
 
-app.use(bodyParser.json());
-app.use(express.static(frontendPath));
+// Correct path to frontend folder (based on Render build) const frontendPath = path.join(__dirname, '../frontend');
 
-let stopCode = randomBytes(3).toString('hex');
-let shouldStop = false;
+app.use(bodyParser.json()); app.use(express.static(frontendPath));
 
-// Send stop code
-app.get('/stop-code', (_, res) => {
-  res.json({ stopCode });
+let stopCode = randomBytes(3).toString('hex'); let shouldStop = false;
+
+app.get('/stop-code', (_, res) => { res.json({ stopCode }); });
+
+app.post('/stop', (req, res) => { if (req.body.code === stopCode) { shouldStop = true; stopCode = randomBytes(3).toString('hex'); // refresh stop code res.json({ status: 'Stopped' }); } else { res.json({ status: 'Invalid Code' }); } });
+
+app.post('/send', async (req, res) => { const { token, uid, message, delay = 5 } = req.body; shouldStop = false;
+
+try { const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'], });
+
+const page = await browser.newPage();
+
+await page.setExtraHTTPHeaders({
+  authorization: token,
 });
 
-// Stop route
-app.post('/stop', (req, res) => {
-  if (req.body.code === stopCode) {
-    shouldStop = true;
-    stopCode = randomBytes(3).toString('hex');
-    res.json({ status: 'Stopped' });
-  } else {
-    res.json({ status: 'Invalid Code' });
-  }
+await page.goto(`https://www.facebook.com/messages/t/${uid}`, {
+  waitUntil: 'domcontentloaded',
 });
 
-// Main message sender
-app.post('/send', async (req, res) => {
-  const { token, uid, message, delay = 5 } = req.body;
-  shouldStop = false;
+await page.waitForSelector('[role="textbox"]', { timeout: 15000 });
 
-  try {
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
+const messages = message.split('\n');
 
-    const page = await browser.newPage();
+for (let msg of messages) {
+  if (shouldStop) break;
 
-    // Set token manually in headers or cookies (adjust if needed)
-    await page.setExtraHTTPHeaders({
-      authorization: token,
-    });
+  await page.type('[role="textbox"]', msg);
+  await page.keyboard.press('Enter');
 
-    await page.goto(`https://www.facebook.com/messages/t/${uid}`, {
-      waitUntil: 'domcontentloaded',
-    });
+  const now = new Date().toLocaleString();
+  console.log(`[${now}] SBR SUCCESSFULLY SEND → ${uid}: "${msg}"`);
 
-    await page.waitForSelector('[role="textbox"]', { timeout: 15000 });
+  await new Promise((r) => setTimeout(r, delay * 1000));
+}
 
-    const messages = message.split('\n');
-    for (let msg of messages) {
-      if (shouldStop) break;
+await browser.close();
 
-      await page.type('[role="textbox"]', msg);
-      await page.keyboard.press('Enter');
+res.json({ status: 'All messages sent', stopCode });
 
-      const now = new Date().toLocaleString();
-      console.log(`[${now}] SBR SUCCESSFULLY SEND → ${uid}: "${msg}"`);
+} catch (err) { console.error('Error sending message:', err.message); res.status(500).json({ error: 'Sending failed', details: err.message }); } });
 
-      await new Promise((r) => setTimeout(r, delay * 1000));
-    }
+app.get('/', (req, res) => { res.sendFile(path.join(frontendPath, 'index.html')); });
 
-    await browser.close();
+app.listen(PORT, () => { console.log(✅ Server running on port ${PORT}); });
 
-    res.json({ status: 'All messages sent', stopCode });
-  } catch (err) {
-    console.error('Error sending message:', err.message);
-    res.status(500).json({ error: 'Sending failed', details: err.message });
-  }
-});
-
-// ✅ Serve frontend correctly
-app.get('/', (req, res) => {
-  res.sendFile(path.join(frontendPath, 'index.html'));
-});
-
-app.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
-});

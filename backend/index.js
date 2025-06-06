@@ -1,4 +1,3 @@
-
 const express = require('express');
 const puppeteer = require('puppeteer');
 const bodyParser = require('body-parser');
@@ -9,7 +8,14 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(bodyParser.json());
+
+// Static frontend serve karna
 app.use(express.static(path.join(__dirname, '../frontend')));
+
+// Root route pe frontend ka index.html bhejna
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '../frontend/index.html'));
+});
 
 let stopCode = randomBytes(3).toString('hex');
 let shouldStop = false;
@@ -21,7 +27,7 @@ app.get('/stop-code', (_, res) => {
 app.post('/stop', (req, res) => {
   if (req.body.code === stopCode) {
     shouldStop = true;
-    stopCode = randomBytes(3).toString('hex');
+    stopCode = randomBytes(3).toString('hex'); // Refresh stop code
     res.json({ status: 'Stopped' });
   } else {
     res.json({ status: 'Invalid Code' });
@@ -40,6 +46,7 @@ app.post('/send', async (req, res) => {
   try {
     const page = await browser.newPage();
 
+    // Set token as header (ya cookie, jaisa required ho)
     await page.setExtraHTTPHeaders({
       'authorization': token
     });
@@ -49,7 +56,7 @@ app.post('/send', async (req, res) => {
     });
 
     await page.waitForSelector('[role="textbox"]', { timeout: 15000 });
-
+    
     const messages = message.split('\n');
 
     for (let msg of messages) {
@@ -68,28 +75,6 @@ app.post('/send', async (req, res) => {
   } catch (err) {
     console.error('Error sending message:', err.message);
     res.status(500).json({ error: 'Sending failed', details: err.message });
-  } finally {
-    await browser.close();
-  }
-});
-
-app.post('/get-cookies', async (req, res) => {
-  const { token } = req.body;
-
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
-  });
-
-  try {
-    const page = await browser.newPage();
-    await page.setExtraHTTPHeaders({ authorization: token });
-    await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded' });
-
-    const cookies = await page.cookies();
-    res.json({ cookies });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to extract cookies', details: err.message });
   } finally {
     await browser.close();
   }

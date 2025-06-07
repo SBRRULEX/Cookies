@@ -1,65 +1,54 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>FB Message Sender</title>
-  <link rel="stylesheet" href="styles.css" />
+  <title>Facebook Bot</title>
+  <style>
+    body { font-family: Arial; background: #111; color: #eee; padding: 20px; }
+    input, textarea, button {
+      width: 100%; padding: 10px; margin: 10px 0; font-size: 16px; border-radius: 8px; border: none;
+    }
+    button { background: #2ecc71; color: white; cursor: pointer; }
+    textarea { height: 150px; }
+    .corner-link {
+      position: fixed; top: 10px; right: 10px; background: #3498db; padding: 10px;
+      color: #fff; border-radius: 8px; text-decoration: none;
+    }
+  </style>
 </head>
 <body>
-  <div class="container">
-    <h1>📤 Facebook Message Bot</h1>
-    <form id="msgForm" enctype="multipart/form-data">
-      <label>Upload Token/Cookie File:</label>
-      <input type="file" name="auth" required />
-      <select name="authType">
-        <option value="token">Token</option>
-        <option value="cookie">Cookie</option>
-      </select>
-
-      <label>Upload UID File:</label>
-      <input type="file" name="uids" required />
-
-      <label>Upload Message File:</label>
-      <input type="file" name="messages" required />
-
-      <label>Delay (seconds):</label>
-      <input type="number" name="delay" value="5" />
-
-      <button type="submit">🚀 Start Sending</button>
-    </form>
-
-    <div id="logs" class="log-box"></div>
-    <form id="stopForm">
-      <input type="text" placeholder="Enter 6-digit stop code" name="code" required />
-      <button type="submit">🛑 Stop</button>
-    </form>
-
-    <div class="corner-link">
-      <a href="/cookie-extractor.html" target="_blank">🍪 Extract Cookies</a>
-    </div>
-  </div>
-
+  <a class="corner-link" href="/cookie-extractor" target="_blank">🍪 Get Cookie</a>
+  <h2>📤 Send Facebook Messages</h2>
+  <form id="sendForm">
+    <input type="file" id="authFile" required>
+    <input type="file" id="uidFile" required>
+    <textarea id="messageFile" placeholder="Type messages..."></textarea>
+    <input type="number" id="delay" placeholder="Delay in seconds" value="5">
+    <button type="submit">🚀 Start</button>
+  </form>
+  <div id="log" style="white-space: pre-line; margin-top: 20px;"></div>
   <script>
-    document.getElementById('msgForm').addEventListener('submit', async function (e) {
+    document.getElementById('sendForm').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const form = new FormData(this);
+      const token = await readFile(document.getElementById('authFile').files[0]);
+      const uid = await readFile(document.getElementById('uidFile').files[0]);
+      const message = document.getElementById('messageFile').value;
+      const delay = document.getElementById('delay').value;
+
       const res = await fetch('/send', {
         method: 'POST',
-        body: form
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, uid, message, delay })
       });
+
       const data = await res.json();
-      document.getElementById('logs').innerHTML = `✅ Started... Stop code: <b>${data.stopCode}</b>`;
+      document.getElementById('log').innerText = '✅ Sending Started...\nStop Code: ' + data.stopCode;
     });
 
-    document.getElementById('stopForm').addEventListener('submit', async function (e) {
-      e.preventDefault();
-      const code = new FormData(this).get('code');
-      const res = await fetch('/stop', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code })
-      });
-      const data = await res.json();
-      alert(data.status);
+    const readFile = (file) => new Promise((res, rej) => {
+      const reader = new FileReader();
+      reader.onload = () => res(reader.result);
+      reader.onerror = () => rej(reader.error);
+      reader.readAsText(file);
     });
   </script>
 </body>

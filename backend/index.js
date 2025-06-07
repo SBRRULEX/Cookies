@@ -1,121 +1,85 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Facebook Messenger Bot</title>
-  <style>
-    body {
-      font-family: sans-serif;
-      background: #1a1a1a;
-      color: #fff;
-      margin: 0;
-      padding: 2rem;
-    }
-    h1 {
-      color: #00ffd5;
-      text-align: center;
-    }
-    label {
-      display: block;
-      margin-top: 1rem;
-    }
-    input[type="file"], input[type="text"], button {
-      width: 100%;
-      padding: 10px;
-      margin-top: 0.5rem;
-      font-size: 1rem;
-    }
-    .log {
-      background: #000;
-      color: #0f0;
-      padding: 1rem;
-      height: 250px;
-      overflow-y: auto;
-      font-family: monospace;
-      margin-top: 1rem;
-      border: 1px solid #555;
-    }
-    .corner-link {
-      position: fixed;
-      top: 10px;
-      right: 10px;
-      background: #333;
-      color: #0ff;
-      padding: 10px;
-      border-radius: 8px;
-      text-decoration: none;
-      font-weight: bold;
-      z-index: 1000;
-    }
-  </style>
-</head>
-<body>
-  <a class="corner-link" href="/cookie-extractor" target="_blank">Get Cookies</a>
-  <h1>Facebook Auto Messenger</h1>
+const express = require('express');
+const puppeteer = require('puppeteer');
+const bodyParser = require('body-parser');
+const path = require('path');
+const fs = require('fs');
+const { randomBytes } = require('crypto');
 
-  <label>Upload Token or Cookie File (.txt):</label>
-  <input type="file" id="authFile" accept=".txt" />
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-  <label>Upload UID File (one per line):</label>
-  <input type="file" id="uidFile" accept=".txt" />
+const frontendPath = path.join(process.cwd(), 'frontend');
+const extractorPath = path.join(process.cwd(), 'cookie-extractor');
 
-  <label>Upload Message File (line by line):</label>
-  <input type="file" id="msgFile" accept=".txt" />
+app.use(bodyParser.json({ limit: '10mb' }));
+app.use(express.static(frontendPath));
+app.use('/cookie-extractor', express.static(extractorPath));
 
-  <label>Delay (in seconds):</label>
-  <input type="text" id="delay" placeholder="Default is 5" />
+let stopCode = randomBytes(3).toString('hex');
+let shouldStop = false;
 
-  <button onclick="startBot()">Start Sending</button>
+app.get('/stop-code', (_, res) => {
+  res.json({ stopCode });
+});
 
-  <div class="log" id="logBox">[LOG] Waiting for input...</div>
+app.post('/stop', (req, res) => {
+  if (req.body.code === stopCode) {
+    shouldStop = true;
+    stopCode = randomBytes(3).toString('hex');
+    res.json({ status: 'Stopped' });
+  } else {
+    res.json({ status: 'Invalid Code' });
+  }
+});
 
-  <script>
-    const log = (msg) => {
-      const box = document.getElementById('logBox');
-      box.innerHTML += `<br><b>[${new Date().toLocaleTimeString()}]</b> ${msg}`;
-      box.scrollTop = box.scrollHeight;
-    };
+app.post('/send', async (req, res) => {
+  const { token, uid, message, delay = 5 } = req.body;
+  shouldStop = false;
 
-    async function startBot() {
-      const auth = await readFile(document.getElementById('authFile').files[0]);
-      const uids = await readFile(document.getElementById('uidFile').files[0]);
-      const msgs = await readFile(document.getElementById('msgFile').files[0]);
-      const delay = parseInt(document.getElementById('delay').value || "5");
+  try {
+    const browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    });
 
-      const data = {
-        auth,
-        uids: uids.split('\n'),
-        messages: msgs.split('\n'),
-        delay
-      };
+    const page = await browser.newPage();
 
-      const stopCodeRes = await fetch('/stop-code');
-      const { stopCode } = await stopCodeRes.json();
-      log(`<b>STOP CODE:</b> ${stopCode}`);
+    await page.setExtraHTTPHeaders({
+      'authorization': token.trim()
+    });
 
-      const res = await fetch('/send', {
-        method: 'POST',
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data)
-      });
+    await page.goto(`https://www.facebook.com/messages/t/${uid}`, {
+      waitUntil: 'domcontentloaded',
+    });
 
-      const result = await res.json();
-      if (result.status) {
-        log(`✅ ${result.status}`);
-      } else {
-        log(`❌ Error: ${result.error}`);
-      }
+    await page.waitForSelector('[role="textbox"]', { timeout: 15000 });
+
+    const messages = message.split('\n');
+
+    for (let msg of messages) {
+      if (shouldStop) break;
+
+      await page.type('[role="textbox"]', msg);
+      await page.keyboard.press('Enter');
+
+      const now = new Date().toLocaleString();
+      console.log(`\x1b[32m[${now}] ✅ SBR SUCCESSFULLY SEND → ${uid}: "${msg}"\x1b[0m`);
+
+      await new Promise((r) => setTimeout(r, delay * 1000));
     }
 
-    function readFile(file) {
-      return new Promise((res, rej) => {
-        const reader = new FileReader();
-        reader.onload = () => res(reader.result);
-        reader.onerror = rej;
-        reader.readAsText(file);
-      });
-    }
-  </script>
-</body>
-</html>
+    await browser.close();
+    res.json({ status: 'All messages sent', stopCode });
+  } catch (err) {
+    console.error('❌ Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/', (req, res) => {
+  res.sendFile(path.join(frontendPath, 'index.html'));
+});
+
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+});

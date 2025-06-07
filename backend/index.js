@@ -1,15 +1,17 @@
 const express = require('express');
-const multer = require('multer');
 const puppeteer = require('puppeteer');
-const fs = require('fs');
+const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
 const { randomBytes } = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const frontendPath = path.join(__dirname, '../frontend');
+const frontendPath = path.join(process.cwd(), 'frontend');
 app.use(express.static(frontendPath));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 const upload = multer({ dest: 'uploads/' });
 
@@ -20,69 +22,64 @@ app.get('/stop-code', (_, res) => {
   res.json({ stopCode });
 });
 
-app.post('/stop', express.json(), (req, res) => {
+app.post('/stop', (req, res) => {
   if (req.body.code === stopCode) {
     shouldStop = true;
     stopCode = randomBytes(3).toString('hex');
-    return res.json({ status: 'Stopped' });
+    res.json({ status: 'Stopped' });
+  } else {
+    res.json({ status: 'Invalid Code' });
   }
-  res.json({ status: 'Invalid Code' });
 });
 
 app.post('/send', upload.fields([
-  { name: 'authFile' }, { name: 'messageFile' }, { name: 'uid' }
+  { name: 'auth', maxCount: 1 },
+  { name: 'uids', maxCount: 1 },
+  { name: 'messages', maxCount: 1 }
 ]), async (req, res) => {
   shouldStop = false;
-  const auth = fs.readFileSync(req.files['authFile'][0].path, 'utf-8');
-  const uid = fs.readFileSync(req.files['uid'][0].path, 'utf-8').trim();
-  const messages = fs.readFileSync(req.files['messageFile'][0].path, 'utf-8').split('\n');
-  const delay = parseInt(req.body.delay || '5');
+  const delay = parseInt(req.body.delay) || 5;
+  const authType = req.body.authType;
 
   try {
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox']
-    });
+    const auth = fs.readFileSync(req.files.auth[0].path, 'utf-8').trim();
+    const uids = fs.readFileSync(req.files.uids[0].path, 'utf-8').split('\n').map(u => u.trim());
+    const messages = fs.readFileSync(req.files.messages[0].path, 'utf-8').split('\n');
+
+    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
     const page = await browser.newPage();
 
-    // Apply auth
-    if (auth.includes('c_user')) {
-      // Cookie login
+    if (authType === 'cookie') {
       const cookies = JSON.parse(auth);
       await page.setCookie(...cookies);
     } else {
-      // Token login
-      await page.setExtraHTTPHeaders({ authorization: auth.trim() });
+      await page.setExtraHTTPHeaders({ authorization: auth });
     }
 
-    await page.goto(`https://facebook.com/messages/t/${uid}`, {
-      waitUntil: 'domcontentloaded'
-    });
+    for (const uid of uids) {
+      await page.goto(`https://www.facebook.com/messages/t/${uid}`, { waitUntil: 'domcontentloaded' });
+      await page.waitForSelector('[role="textbox"]', { timeout: 15000 });
 
-    await page.waitForSelector('[role="textbox"]', { timeout: 15000 });
-
-    for (const msg of messages) {
-      if (shouldStop) break;
-      await page.type('[role="textbox"]', msg);
-      await page.keyboard.press('Enter');
-      const now = new Date().toLocaleString();
-      console.log(`[${now}] ✅ Sent to ${uid}: "${msg}"`);
-      await new Promise(r => setTimeout(r, delay * 1000));
+      for (const msg of messages) {
+        if (shouldStop) break;
+        await page.type('[role="textbox"]', msg);
+        await page.keyboard.press('Enter');
+        console.log(`[${new Date().toLocaleString()}] ✅ SBR SUCCESSFULLY SEND to ${uid} → ${msg}`);
+        await new Promise(r => setTimeout(r, delay * 1000));
+      }
     }
 
     await browser.close();
-    res.json({ status: 'All messages sent successfully.', stopCode });
+    res.json({ status: 'Success', stopCode });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to send messages', details: err.message });
+    res.status(500).json({ error: err.message });
   }
 });
 
-app.get('/extract', (req, res) => {
-  res.sendFile(path.join(__dirname, '../frontend/extract.html'));
-});
-
-app.get('*', (req, res) => {
+app.get('/', (req, res) => {
   res.sendFile(path.join(frontendPath, 'index.html'));
 });
 
-app.listen(PORT, () => console.log(`🚀 Running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`✅ Server running on port ${PORT}`);
+});

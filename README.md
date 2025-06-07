@@ -1,11 +1,18 @@
-# 📦 Facebook Bot with Cookie Extractor
+# Facebook Bot + Cookie Extractor
 
-This project allows you to:
-- ✅ Send Facebook messages using a token
-- ✅ Extract Facebook cookies using a token
-- ✅ Deploy easily on **Render**
-- ✅ Use entirely from mobile (via Termux or Render)
+🎯 Features:
+- Send messages (inbox + group)
+- Upload cookie/token, UID, message files
+- Delay support + stop with 6-digit code
+- Frontend UI + Cookie Extractor tool (email/pass/2FA)
+- Fully mobile-compatible and deployable on Render
 
----
+📦 Structure:
+- /backend → Message bot
+- /frontend → UI
+- /cookie-extractor → Login-based cookie tool
 
-## 📁 Folder Structure
+🚀 Deploy on Render:
+- Add new Web Service
+- Use `Dockerfile`
+- Expose port 3000

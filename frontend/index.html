@@ -1,89 +1,65 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>FB Message Bot</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 40px;
-      max-width: 500px;
-    }
-    label {
-      display: block;
-      margin: 15px 0 5px;
-    }
-    input, textarea {
-      width: 100%;
-      padding: 8px;
-      font-size: 1em;
-    }
-    button {
-      margin-top: 15px;
-      padding: 10px;
-      font-size: 1em;
-      cursor: pointer;
-    }
-    .status {
-      margin-top: 20px;
-      font-weight: bold;
-      color: green;
-    }
-  </style>
+  <title>FB Message Sender</title>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <h1>Facebook Message Bot</h1>
+  <div class="container">
+    <h1>📤 Facebook Message Bot</h1>
+    <form id="msgForm" enctype="multipart/form-data">
+      <label>Upload Token/Cookie File:</label>
+      <input type="file" name="auth" required />
+      <select name="authType">
+        <option value="token">Token</option>
+        <option value="cookie">Cookie</option>
+      </select>
 
-  <form id="messageForm">
-    <label for="token">Facebook Token:</label>
-    <input type="text" id="token" name="token" required />
+      <label>Upload UID File:</label>
+      <input type="file" name="uids" required />
 
-    <label for="uid">Recipient UID:</label>
-    <input type="text" id="uid" name="uid" required />
+      <label>Upload Message File:</label>
+      <input type="file" name="messages" required />
 
-    <label for="message">Message (use newline for multiple):</label>
-    <textarea id="message" name="message" rows="5" required></textarea>
+      <label>Delay (seconds):</label>
+      <input type="number" name="delay" value="5" />
 
-    <label for="delay">Delay between messages (seconds):</label>
-    <input type="number" id="delay" name="delay" value="5" min="1" />
+      <button type="submit">🚀 Start Sending</button>
+    </form>
 
-    <button type="submit">Send Messages</button>
-  </form>
+    <div id="logs" class="log-box"></div>
+    <form id="stopForm">
+      <input type="text" placeholder="Enter 6-digit stop code" name="code" required />
+      <button type="submit">🛑 Stop</button>
+    </form>
 
-  <div class="status" id="status"></div>
+    <div class="corner-link">
+      <a href="/cookie-extractor.html" target="_blank">🍪 Extract Cookies</a>
+    </div>
+  </div>
 
   <script>
-    const form = document.getElementById('messageForm');
-    const statusDiv = document.getElementById('status');
-
-    form.addEventListener('submit', async (e) => {
+    document.getElementById('msgForm').addEventListener('submit', async function (e) {
       e.preventDefault();
+      const form = new FormData(this);
+      const res = await fetch('/send', {
+        method: 'POST',
+        body: form
+      });
+      const data = await res.json();
+      document.getElementById('logs').innerHTML = `✅ Started... Stop code: <b>${data.stopCode}</b>`;
+    });
 
-      statusDiv.textContent = 'Sending messages...';
-
-      const token = form.token.value.trim();
-      const uid = form.uid.value.trim();
-      const message = form.message.value.trim();
-      const delay = Number(form.delay.value);
-
-      try {
-        const response = await fetch('/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token, uid, message, delay })
-        });
-
-        const result = await response.json();
-
-        if (response.ok) {
-          statusDiv.textContent = `Success! Stop Code: ${result.stopCode}`;
-        } else {
-          statusDiv.textContent = `Error: ${result.error || 'Unknown error'}`;
-        }
-      } catch (err) {
-        statusDiv.textContent = `Network error: ${err.message}`;
-      }
+    document.getElementById('stopForm').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const code = new FormData(this).get('code');
+      const res = await fetch('/stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+      });
+      const data = await res.json();
+      alert(data.status);
     });
   </script>
 </body>

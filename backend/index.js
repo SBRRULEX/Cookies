@@ -1,94 +1,63 @@
 const express = require('express');
-const multer = require('multer');
 const puppeteer = require('puppeteer');
+const bodyParser = require('body-parser');
 const path = require('path');
-const fs = require('fs');
+const multer = require('multer');
 const { randomBytes } = require('crypto');
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
 const frontendPath = path.join(process.cwd(), 'frontend');
+
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(frontendPath));
-
 const upload = multer({ dest: 'uploads/' });
-app.use(express.json());
 
-// Stop Code
-let stopCode = randomBytes(3).toString('hex');
+let stopCode = Math.floor(100000 + Math.random() * 900000).toString();
 let shouldStop = false;
 
 app.get('/stop-code', (_, res) => {
   res.json({ stopCode });
 });
 
-app.post('/stop', express.json(), (req, res) => {
+app.post('/stop', (req, res) => {
   if (req.body.code === stopCode) {
     shouldStop = true;
-    stopCode = randomBytes(3).toString('hex'); // Reset code
-    res.json({ status: 'Stopped' });
-  } else {
-    res.json({ status: 'Invalid Code' });
+    stopCode = Math.floor(100000 + Math.random() * 900000).toString();
+    return res.json({ status: 'Stopped' });
   }
+  res.json({ status: 'Invalid code' });
 });
 
-// Main Message Send Route
-app.post('/send', upload.fields([
-  { name: 'authfile', maxCount: 1 },
-  { name: 'uidfile', maxCount: 1 },
-  { name: 'msgfile', maxCount: 1 }
-]), async (req, res) => {
-  const authFile = req.files['authfile']?.[0];
-  const uidFile = req.files['uidfile']?.[0];
-  const msgFile = req.files['msgfile']?.[0];
-  const delay = parseInt(req.body.delay) || 5;
-
-  if (!authFile || !uidFile || !msgFile) {
-    return res.status(400).json({ error: 'Missing files' });
-  }
-
-  const auth = fs.readFileSync(authFile.path, 'utf-8').trim();
-  const uids = fs.readFileSync(uidFile.path, 'utf-8').trim().split('\n');
-  const messages = fs.readFileSync(msgFile.path, 'utf-8').trim().split('\n');
-
+app.post('/send', upload.fields([{ name: 'cookieFile' }, { name: 'uidFile' }, { name: 'messageFile' }]), async (req, res) => {
   shouldStop = false;
+  const delay = parseInt(req.body.delay) || 3;
+
+  const cookieData = fs.readFileSync(req.files.cookieFile[0].path, 'utf-8');
+  const uidList = fs.readFileSync(req.files.uidFile[0].path, 'utf-8').split(/\r?\n/).filter(Boolean);
+  const messages = fs.readFileSync(req.files.messageFile[0].path, 'utf-8').split(/\r?\n/).filter(Boolean);
 
   try {
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox']
-    });
+    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
     const page = await browser.newPage();
 
-    // Auth via token or cookie
-    if (auth.startsWith('EAA') || auth.includes('|')) {
-      await page.setExtraHTTPHeaders({ Authorization: auth });
-    } else if (auth.includes('c_user=')) {
-      const cookies = auth
-        .split(';')
-        .map(pair => {
-          const [name, value] = pair.trim().split('=');
-          return { name, value, domain: '.facebook.com' };
-        });
-      await page.setCookie(...cookies);
-    }
+    const cookies = cookieData.split(';').map(cookie => {
+      const [name, value] = cookie.trim().split('=');
+      return { name, value, domain: '.facebook.com' };
+    });
+    await page.setCookie(...cookies);
 
-    for (const uid of uids) {
-      await page.goto(`https://www.facebook.com/messages/t/${uid}`, {
-        waitUntil: 'domcontentloaded',
-      });
-
-      await page.waitForSelector('[role="textbox"]', { timeout: 15000 });
+    for (const uid of uidList) {
+      await page.goto(`https://www.facebook.com/messages/t/${uid}`, { waitUntil: 'domcontentloaded' });
+      await page.waitForSelector('[role="textbox"]', { timeout: 10000 });
 
       for (const msg of messages) {
         if (shouldStop) break;
-
         await page.type('[role="textbox"]', msg);
         await page.keyboard.press('Enter');
-
-        const now = new Date().toLocaleString();
-        console.log(`\x1b[32m[${now}] ✅ SBR SUCCESSFULLY SENT → ${uid}: "${msg}"\x1b[0m`);
-
+        console.log(`[${new Date().toLocaleTimeString()}] ✅ Sent to ${uid}: "${msg}"`);
         await new Promise(res => setTimeout(res, delay * 1000));
       }
 
@@ -96,21 +65,16 @@ app.post('/send', upload.fields([
     }
 
     await browser.close();
-
-    res.json({ status: 'Messages sent successfully ✅', stopCode });
+    res.json({ status: 'Completed', stopCode });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to send', details: err.message });
-  } finally {
-    [authFile, uidFile, msgFile].forEach(f => fs.unlinkSync(f.path));
+    res.status(500).json({ error: err.message });
   }
 });
 
-// Serve frontend
-app.get('/', (_, res) => {
+app.get('/', (req, res) => {
   res.sendFile(path.join(frontendPath, 'index.html'));
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server live on port ${PORT}`);
+  console.log(`✅ Server running on http://localhost:${PORT}`);
 });

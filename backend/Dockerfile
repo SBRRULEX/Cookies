@@ -2,9 +2,12 @@ FROM node:20
 
 WORKDIR /app
 
-COPY package*.json ./
+COPY backend ./backend
+COPY frontend ./frontend
+COPY cookie-extractor ./cookie-extractor
+
+WORKDIR /app/backend
 RUN npm install
 
-COPY . .
-
-CMD ["npm", "start"]
+EXPOSE 3000
+CMD ["node", "index.js"]

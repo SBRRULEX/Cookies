@@ -1,7 +1,6 @@
 {
   "name": "cookie-extractor",
   "version": "1.0.0",
-  "description": "Extract Facebook cookies using Puppeteer",
   "main": "getcookies_secure.js",
   "scripts": {
     "start": "node getcookies_secure.js"

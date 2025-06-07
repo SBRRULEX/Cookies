@@ -4,7 +4,6 @@ WORKDIR /app
 
 COPY backend ./backend
 COPY frontend ./frontend
-COPY cookie-extractor ./cookie-extractor
 
 WORKDIR /app/backend
 RUN npm install

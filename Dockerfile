@@ -1,14 +1,13 @@
-FROM node:20-alpine
+FROM node:20
 
 WORKDIR /app
 
-COPY backend /app/backend
-COPY frontend /app/frontend
+COPY backend ./backend
+COPY frontend ./frontend
+COPY cookie-extractor ./cookie-extractor
 
 WORKDIR /app/backend
-
 RUN npm install
 
 EXPOSE 3000
-
-CMD ["node", "index.js"]
+CMD ["npm", "start"]
